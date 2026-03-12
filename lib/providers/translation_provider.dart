@@ -8,8 +8,52 @@ import '../services/api_service.dart';
 class TranslationProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
 
+  void _appendUniqueLines(String rawText) {
+    final incomingLines = rawText
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    if (incomingLines.isEmpty) {
+      return;
+    }
+
+    final existingLines = _sourceText
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toSet();
+
+    final newUniqueLines = <String>[];
+    for (final line in incomingLines) {
+      if (!existingLines.contains(line)) {
+        existingLines.add(line);
+        newUniqueLines.add(line);
+      }
+    }
+
+    if (newUniqueLines.isEmpty) {
+      return;
+    }
+
+    if (_sourceText.trim().isEmpty) {
+      _sourceText = newUniqueLines.join('\n');
+    } else {
+      _sourceText = '${_sourceText.trimRight()}\n${newUniqueLines.join('\n')}';
+    }
+  }
+
+  String _compactForLog(String text) {
+    final singleLine = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (singleLine.length <= 220) {
+      return singleLine;
+    }
+    return '${singleLine.substring(0, 220)}...';
+  }
+
   TranslationProvider() {
-    debugPrint("DEBUG: TranslationProvider constructor called, setting up overlayListener.");
+    debugPrint(
+        "DEBUG: TranslationProvider constructor called, setting up overlayListener.");
     FlutterOverlayWindow.overlayListener.listen((event) {
       debugPrint("DEBUG: Received event from overlayListener: $event");
       if (event == "SYNC_START_SCAN") {
@@ -21,15 +65,24 @@ class TranslationProvider with ChangeNotifier {
         _isScanning = false;
         notifyListeners();
         // Bring app back to foreground when scanning stops
-        const MethodChannel('com.example.gov_translator/app_channel').invokeMethod('bringToForeground');
+        const MethodChannel('com.example.gov_translator/app_channel')
+            .invokeMethod('bringToForeground');
+      } else if (event is String && event.startsWith("ERROR:")) {
+        final message = event.substring(6);
+        debugPrint("DEBUG: Overlay OCR error => $message");
+        _errorMessage = message;
+        _isScanning = false;
+        notifyListeners();
+      } else if (event is String && event.startsWith("BULK_TEXT:")) {
+        final bulkText = event.substring(10);
+        debugPrint("DEBUG: Received BULK_TEXT length: ${bulkText.length}");
+        _appendUniqueLines(bulkText);
+        notifyListeners();
       } else if (event is String && event.startsWith("TEXT:")) {
         final newText = event.substring(5);
         debugPrint("DEBUG: Appending synced text length: ${newText.length}");
-        if (_sourceText.isEmpty) {
-          _sourceText = newText;
-        } else {
-          _sourceText += "\n" + newText;
-        }
+        debugPrint("DEBUG: OCR extracted text => ${_compactForLog(newText)}");
+        _appendUniqueLines(newText);
         notifyListeners();
       }
     });
@@ -79,7 +132,7 @@ class TranslationProvider with ChangeNotifier {
         text: text,
         dialect: _currentDialect,
       );
-      
+
       _translatedText = result['translated_text'];
       _summary = result['summary'] ?? "No summary available.";
     } catch (e) {
@@ -101,14 +154,8 @@ class TranslationProvider with ChangeNotifier {
       final result = await _apiService.scanScreen(reset: reset);
       String newText = result['extracted_text'];
       debugPrint("DEBUG: OCR Success. Extracted length: ${newText.length}");
-      
-      if (newText.isNotEmpty) {
-        if (_sourceText.isEmpty) {
-          _sourceText = newText;
-        } else {
-          _sourceText += "\n" + newText;
-        }
-      }
+
+      _appendUniqueLines(newText);
     } catch (e) {
       debugPrint("DEBUG: OCR Error caught in provider: $e");
       _errorMessage = e.toString();
@@ -123,13 +170,13 @@ class TranslationProvider with ChangeNotifier {
 
   Future<void> startContinuousScan() async {
     if (_isScanning) return;
-    
+
     _isScanning = true;
     notifyListeners();
-    
+
     // Reset history once at the start of a session
     await scanScreen(reset: true);
-    
+
     while (_isScanning) {
       await Future.delayed(const Duration(seconds: 1));
       if (!_isScanning) break;

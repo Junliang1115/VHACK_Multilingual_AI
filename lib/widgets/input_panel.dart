@@ -16,6 +16,18 @@ class InputPanel extends StatefulWidget {
 class _InputPanelState extends State<InputPanel> with WidgetsBindingObserver {
   final TextEditingController _controller = TextEditingController();
 
+  Future<void> _cleanupStaleOverlay() async {
+    final provider = Provider.of<TranslationProvider>(context, listen: false);
+    final isActive = await FlutterOverlayWindow.isActive();
+    if (!isActive) {
+      return;
+    }
+
+    debugPrint("DEBUG (Main): Closing stale overlay from previous session.");
+    provider.stopContinuousScan();
+    await FlutterOverlayWindow.closeOverlay();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -27,6 +39,7 @@ class _InputPanelState extends State<InputPanel> with WidgetsBindingObserver {
       _controller.addListener(() {
         provider.setSourceText(_controller.text);
       });
+      _cleanupStaleOverlay();
     });
   }
 
@@ -42,7 +55,8 @@ class _InputPanelState extends State<InputPanel> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       final provider = Provider.of<TranslationProvider>(context, listen: false);
       if (provider.isScanning) {
-        debugPrint("DEBUG (Main): App resumed manually, auto-stopping overlay scan");
+        debugPrint(
+            "DEBUG (Main): App resumed manually, auto-stopping overlay scan");
         provider.stopContinuousScan();
         FlutterOverlayWindow.closeOverlay();
       }
@@ -75,7 +89,7 @@ class _InputPanelState extends State<InputPanel> with WidgetsBindingObserver {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         // Clear error in provider BEFORE showing so it doesn't loop
         translationProvider.clearError();
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(errorMessage),
@@ -83,7 +97,7 @@ class _InputPanelState extends State<InputPanel> with WidgetsBindingObserver {
             duration: const Duration(seconds: 4),
             behavior: SnackBarBehavior.floating,
             action: SnackBarAction(
-              label: 'OK', 
+              label: 'OK',
               textColor: Colors.white,
               onPressed: () {},
             ),
@@ -118,15 +132,17 @@ class _InputPanelState extends State<InputPanel> with WidgetsBindingObserver {
                     ),
                     const SizedBox(width: 8),
                     _ActionButton(
-                      icon: translationProvider.isScanning 
-                          ? Icons.stop_circle_outlined 
-                          : (translationProvider.isLoading 
-                              ? Icons.hourglass_empty 
+                      icon: translationProvider.isScanning
+                          ? Icons.stop_circle_outlined
+                          : (translationProvider.isLoading
+                              ? Icons.hourglass_empty
                               : Icons.screen_search_desktop_outlined),
                       label: translationProvider.isScanning
                           ? 'Stop Scanning'
-                          : (translationProvider.isLoading && _controller.text == translationProvider.sourceText
-                              ? 'Scanning...' 
+                          : (translationProvider.isLoading &&
+                                  _controller.text ==
+                                      translationProvider.sourceText
+                              ? 'Scanning...'
                               : (isMobile ? 'Capture' : 'Screen Capture')),
                       color: translationProvider.isScanning ? Colors.red : null,
                       onPressed: () async {
@@ -135,17 +151,21 @@ class _InputPanelState extends State<InputPanel> with WidgetsBindingObserver {
                           translationProvider.stopContinuousScan();
                           await FlutterOverlayWindow.closeOverlay();
                         } else {
-                          debugPrint("DEBUG: Start Continuous Scan triggered via overlay!");
-                          
-                          bool status = await FlutterOverlayWindow.isPermissionGranted();
+                          debugPrint(
+                              "DEBUG: Start Continuous Scan triggered via overlay!");
+
+                          bool status =
+                              await FlutterOverlayWindow.isPermissionGranted();
                           if (!status) {
                             // Can't use await if requestPermission returns bool directly but doc says Future<bool?>
-                            final permissionStatus = await FlutterOverlayWindow.requestPermission();
+                            final permissionStatus =
+                                await FlutterOverlayWindow.requestPermission();
                             status = permissionStatus ?? false;
                           }
-                          
+
                           if (status) {
-                            final isActive = await FlutterOverlayWindow.isActive();
+                            final isActive =
+                                await FlutterOverlayWindow.isActive();
                             if (!isActive) {
                               await FlutterOverlayWindow.showOverlay(
                                 enableDrag: true,
@@ -155,12 +175,15 @@ class _InputPanelState extends State<InputPanel> with WidgetsBindingObserver {
                                 height: 100,
                               );
                             }
-                            const MethodChannel('com.example.gov_translator/app_channel').invokeMethod('moveToBackground');
+                            const MethodChannel(
+                                    'com.example.gov_translator/app_channel')
+                                .invokeMethod('moveToBackground');
                           } else {
                             if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text('Please grant "Display over other apps" permission to enable the hovering icon.'), 
+                                  content: Text(
+                                      'Please grant "Display over other apps" permission to enable the hovering icon.'),
                                   backgroundColor: Colors.red,
                                 ),
                               );
@@ -196,21 +219,23 @@ class _InputPanelState extends State<InputPanel> with WidgetsBindingObserver {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: translationProvider.isLoading 
-                  ? null 
-                  : () => translationProvider.translateText(_controller.text),
+                onPressed: translationProvider.isLoading
+                    ? null
+                    : () => translationProvider.translateText(_controller.text),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(translationProvider.isLoading ? 'Processing...' : 'Translate Now'),
+                    Text(translationProvider.isLoading
+                        ? 'Processing...'
+                        : 'Translate Now'),
                     const SizedBox(width: 8),
-                    translationProvider.isLoading 
-                      ? const SizedBox(
-                          width: 18, 
-                          height: 18, 
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)
-                        )
-                      : const Icon(Icons.auto_awesome, size: 18),
+                    translationProvider.isLoading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.auto_awesome, size: 18),
                   ],
                 ),
               ),
@@ -243,7 +268,8 @@ class _ActionButton extends StatelessWidget {
       label: Text(label),
       style: OutlinedButton.styleFrom(
         foregroundColor: color ?? AppTheme.primaryBlue,
-        side: BorderSide(color: color?.withOpacity(0.3) ?? Colors.grey.shade300),
+        side:
+            BorderSide(color: color?.withOpacity(0.3) ?? Colors.grey.shade300),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),

@@ -90,12 +90,15 @@ async def scan_screen(request: OCRRequest):
             lang=request.lang, 
             reset=request.reset
         )
+        print(
+            f"DEBUG: /scan-screen reset={request.reset} lang={request.lang} extracted_length={len(extracted_text)}"
+        )
         return OCRResponse(extracted_text=extracted_text)
         
     except Exception as e:
         error_msg = str(e)
-        if "tessdata" in error_msg.lower():
-            error_msg = f"OCR Error: Language data missing for: {lang}. {error_msg}"
+        if "unsupported ocr language" in error_msg.lower():
+            error_msg = f"OCR Error: {error_msg}"
         raise HTTPException(status_code=500, detail=error_msg)
 
 if __name__ == "__main__":
