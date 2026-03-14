@@ -3,13 +3,34 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import uvicorn
+import os
+from dotenv import load_dotenv
 
-app = FastAPI(title="Gov Translate AI API")
+# Load environment variables from .env file
+load_dotenv()
+
+# Configuration from environment variables
+APP_NAME = os.getenv("APP_NAME", "Gov Translate AI API")
+API_VERSION = os.getenv("API_VERSION", "1.0.0")
+DEBUG = os.getenv("DEBUG", "True").lower() == "true"
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+HOST = os.getenv("HOST", "0.0.0.0")
+PORT = int(os.getenv("PORT", "8000"))
+
+# AI API Keys (for future use)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+app = FastAPI(
+    title=APP_NAME,
+    version=API_VERSION,
+    debug=DEBUG
+)
 
 # Enable CORS for Flutter (necessary for web/mobile)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your frontend URL
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -43,7 +64,12 @@ def mock_translate(text: str, dialect: str) -> str:
 
 @app.get("/")
 async def root():
-    return {"status": "ok", "message": "Gov Translate AI Backend is running"}
+    return {
+        "status": "ok",
+        "message": "Gov Translate AI Backend is running",
+        "version": API_VERSION,
+        "ai_configured": bool(GEMINI_API_KEY or OPENAI_API_KEY)
+    }
 
 @app.post("/translate", response_model=TranslationResponse)
 async def translate_text(request: TranslationRequest):
@@ -70,4 +96,8 @@ async def summarize_text(request: SummaryRequest):
     )
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    print(f"Starting {APP_NAME} v{API_VERSION}")
+    print(f"Server: http://{HOST}:{PORT}")
+    print(f"API Docs: http://{HOST}:{PORT}/docs")
+    print(f"AI Keys Configured: {'Yes' if (GEMINI_API_KEY or OPENAI_API_KEY) else 'No (using mock data)'}")
+    uvicorn.run("main:app", host=HOST, port=PORT, reload=DEBUG)
