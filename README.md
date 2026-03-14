@@ -1,3 +1,4 @@
+python -m uvicorn main:app --reload
 # 🌐 Gov Translate AI
 
 A modern, AI-powered government translation application that converts text to various Malaysian dialects. Built with Flutter for cross-platform UI and FastAPI for the backend.

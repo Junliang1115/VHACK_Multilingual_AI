@@ -3,29 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import uvicorn
-import os
-from dotenv import load_dotenv
+from ocr_service import capture_and_ocr
 
-# Load environment variables from .env file
-load_dotenv()
-
-# Configuration from environment variables
-APP_NAME = os.getenv("APP_NAME", "Gov Translate AI API")
-API_VERSION = os.getenv("API_VERSION", "1.0.0")
-DEBUG = os.getenv("DEBUG", "True").lower() == "true"
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
-HOST = os.getenv("HOST", "0.0.0.0")
-PORT = int(os.getenv("PORT", "8000"))
-
-# AI API Keys (for future use)
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
-app = FastAPI(
-    title=APP_NAME,
-    version=API_VERSION,
-    debug=DEBUG
-)
+app = FastAPI(title="Gov Translate AI API")
 
 # Enable CORS for Flutter (necessary for web/mobile)
 app.add_middleware(
@@ -94,6 +74,37 @@ async def summarize_text(request: SummaryRequest):
     return SummaryResponse(
         summary=f"Summary: The input text contains {len(request.text)} characters. (Mock summary logic)"
     )
+
+class OCRRequest(BaseModel):
+    region: Optional[List[int]] = None
+    lang: str = "eng+msa+chi_sim+chi_tra"
+    reset: bool = False
+
+class OCRResponse(BaseModel):
+    extracted_text: str
+
+@app.post("/scan-screen", response_model=OCRResponse)
+async def scan_screen(request: OCRRequest):
+    """
+    Scans the screen and extracts text using the OCR service.
+    Set reset=True to clear scrolling history.
+    """
+    try:
+        extracted_text = capture_and_ocr(
+            region=request.region, 
+            lang=request.lang, 
+            reset=request.reset
+        )
+        print(
+            f"DEBUG: /scan-screen reset={request.reset} lang={request.lang} extracted_length={len(extracted_text)}"
+        )
+        return OCRResponse(extracted_text=extracted_text)
+        
+    except Exception as e:
+        error_msg = str(e)
+        if "unsupported ocr language" in error_msg.lower():
+            error_msg = f"OCR Error: {error_msg}"
+        raise HTTPException(status_code=500, detail=error_msg)
 
 if __name__ == "__main__":
     print(f"Starting {APP_NAME} v{API_VERSION}")
