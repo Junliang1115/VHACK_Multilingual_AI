@@ -7,6 +7,8 @@ from ocr_service import capture_and_ocr
 from chunking_service import chunk_text
 from embedding_service import embed_texts
 from vector_store_service import store_chunks, query_collection, delete_collection, list_collections
+from llm_service import generate_rag_answer
+from llm_service_gemini import generate_rag_answer_gemini
 
 app = FastAPI(title="Gov Translate AI API")
 
@@ -120,6 +122,23 @@ class QueryEmbeddingResponse(BaseModel):
     embedding: List[float]
     embedding_dimension: int
     model_name: str
+
+
+class RagGenerateRequest(BaseModel):
+    query: str
+    collection_name: str = "default"
+    top_k: int = 5
+    normalize_embeddings: bool = True
+    max_new_tokens: int = 256
+    temperature: float = 0.2
+    top_p: float = 0.9
+
+
+class RagGenerateResponse(BaseModel):
+    query: str
+    answer: str
+    collection_name: str
+    sources: List[SearchResult]
 
 # Mock AI Logic (Replace with Gemini/OpenAI integration later)
 def mock_translate(text: str, dialect: str) -> str:
@@ -331,6 +350,146 @@ async def embed_user_query(request: QueryEmbeddingRequest):
         embedding=query_embedding,
         embedding_dimension=len(query_embedding),
         model_name="SEALD/seald-embedding",
+    )
+
+
+@app.post("/rag-generate", response_model=RagGenerateResponse)
+async def rag_generate(request: RagGenerateRequest):
+    """RAG pipeline: embed query -> search vectors -> generate answer with Sailor2."""
+    clean_query = (request.query or "").strip()
+    if not clean_query:
+        raise HTTPException(status_code=400, detail="Query is required")
+    if request.top_k < 1:
+        raise HTTPException(status_code=400, detail="top_k must be >= 1")
+    if request.max_new_tokens < 1:
+        raise HTTPException(status_code=400, detail="max_new_tokens must be >= 1")
+    if request.temperature < 0:
+        raise HTTPException(status_code=400, detail="temperature must be >= 0")
+    if request.top_p <= 0 or request.top_p > 1:
+        raise HTTPException(status_code=400, detail="top_p must be between 0 and 1")
+
+    try:
+        query_embeddings = embed_texts(
+            [clean_query],
+            normalize_embeddings=request.normalize_embeddings,
+        )
+        raw_results = query_collection(
+            query_embeddings=query_embeddings,
+            collection_name=request.collection_name,
+            top_k=request.top_k,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Retrieval failed: {str(e)}")
+
+    if not raw_results or not raw_results[0]["documents"]:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No context found in collection '{request.collection_name}'",
+        )
+
+    sources = [
+        SearchResult(
+            id=rid,
+            document=doc,
+            distance=dist,
+            metadata=meta,
+        )
+        for rid, doc, dist, meta in zip(
+            raw_results[0]["ids"],
+            raw_results[0]["documents"],
+            raw_results[0]["distances"],
+            raw_results[0]["metadatas"],
+        )
+    ]
+
+    try:
+        answer = generate_rag_answer(
+            question=clean_query,
+            contexts=[s.document for s in sources],
+            max_new_tokens=request.max_new_tokens,
+            temperature=request.temperature,
+            top_p=request.top_p,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
+
+    return RagGenerateResponse(
+        query=clean_query,
+        answer=answer,
+        collection_name=request.collection_name,
+        sources=sources,
+    )
+
+
+@app.post("/rag-generate-gemini", response_model=RagGenerateResponse)
+async def rag_generate_gemini(request: RagGenerateRequest):
+    """RAG pipeline: embed query -> search vectors -> generate answer with Gemini."""
+    clean_query = (request.query or "").strip()
+    if not clean_query:
+        raise HTTPException(status_code=400, detail="Query is required")
+    if request.top_k < 1:
+        raise HTTPException(status_code=400, detail="top_k must be >= 1")
+    if request.max_new_tokens < 1:
+        raise HTTPException(status_code=400, detail="max_new_tokens must be >= 1")
+    if request.temperature < 0:
+        raise HTTPException(status_code=400, detail="temperature must be >= 0")
+    if request.top_p <= 0 or request.top_p > 1:
+        raise HTTPException(status_code=400, detail="top_p must be between 0 and 1")
+
+    try:
+        query_embeddings = embed_texts(
+            [clean_query],
+            normalize_embeddings=request.normalize_embeddings,
+        )
+        raw_results = query_collection(
+            query_embeddings=query_embeddings,
+            collection_name=request.collection_name,
+            top_k=request.top_k,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Retrieval failed: {str(e)}")
+
+    if not raw_results or not raw_results[0]["documents"]:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No context found in collection '{request.collection_name}'",
+        )
+
+    sources = [
+        SearchResult(
+            id=rid,
+            document=doc,
+            distance=dist,
+            metadata=meta,
+        )
+        for rid, doc, dist, meta in zip(
+            raw_results[0]["ids"],
+            raw_results[0]["documents"],
+            raw_results[0]["distances"],
+            raw_results[0]["metadatas"],
+        )
+    ]
+
+    try:
+        answer = generate_rag_answer_gemini(
+            question=clean_query,
+            contexts=[s.document for s in sources],
+            max_new_tokens=request.max_new_tokens,
+            temperature=request.temperature,
+            top_p=request.top_p,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
+
+    return RagGenerateResponse(
+        query=clean_query,
+        answer=answer,
+        collection_name=request.collection_name,
+        sources=sources,
     )
 
 
