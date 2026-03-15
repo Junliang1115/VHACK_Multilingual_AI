@@ -90,7 +90,7 @@ class TranslationProvider with ChangeNotifier {
 
   String _translatedText = "";
   String _summary = "";
-  String _currentDialect = "Kedah";
+  String _currentDialect = "English";
   String _sourceText = "";
   bool _isLoading = false;
   String _errorMessage = "";

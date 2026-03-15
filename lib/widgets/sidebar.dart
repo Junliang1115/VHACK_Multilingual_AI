@@ -39,7 +39,7 @@ class HistorySidebar extends StatelessWidget {
               itemBuilder: (context, index) {
                 return _HistoryItem(
                   title: 'Document $index.pdf',
-                  subtitle: 'Translated to Malay (Kedah Dialect)',
+                  subtitle: 'Translated to English (Kelate / Hokkien / Cantonese)',
                   time: '${index + 1}h ago',
                   isActive: index == 0,
                 );

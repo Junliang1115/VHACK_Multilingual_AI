@@ -204,11 +204,20 @@ class _FloatingOverlayState extends State<FloatingOverlay> {
             ],
           ),
           child: Center(
-            child: Icon(
-              isScanning ? Icons.stop_rounded : Icons.search_rounded,
-              color: Colors.white,
-              size: 28,
-            ),
+            child: isScanning
+                ? const Icon(
+                    Icons.stop_circle_rounded,
+                    color: Colors.white,
+                    size: 28,
+                  )
+                : ClipOval(
+                    child: Image.asset(
+                      'assets/images/Translator_Logo.png',
+                      width: 34,
+                      height: 34,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
           ),
         ),
       ),
