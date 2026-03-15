@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'providers/translation_provider.dart';
 import 'screens/home_screen.dart';
 import 'theme/app_theme.dart';
-import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'widgets/floating_overlay.dart';
 
 @pragma("vm:entry-point")

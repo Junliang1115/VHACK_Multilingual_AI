@@ -2,11 +2,11 @@ import io
 import os
 import re
 import subprocess
+import sys
 import time
 
 import cv2
 import numpy as np
-from paddleocr import PaddleOCR
 from PIL import Image
 
 # Global state to keep track of seen text across multiple scans (for scrolling)
@@ -54,6 +54,17 @@ def _resolve_paddle_languages(lang):
 
 
 def _get_ocr_engine(lang):
+    try:
+        from paddleocr import PaddleOCR
+    except ModuleNotFoundError as exc:
+        py_ver = f"{sys.version_info.major}.{sys.version_info.minor}"
+        raise RuntimeError(
+            "PaddleOCR dependencies are not installed correctly. "
+            "Install backend requirements in a dedicated virtual environment, "
+            "and use Python 3.10 or 3.11 for best compatibility. "
+            f"Current Python: {py_ver}. Original error: {exc}"
+        ) from exc
+
     if lang not in _OCR_ENGINES:
         _OCR_ENGINES[lang] = PaddleOCR(use_angle_cls=True, lang=lang, show_log=False)
     return _OCR_ENGINES[lang]

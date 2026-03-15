@@ -1,8 +1,7 @@
-import 'dart:io' show Platform;
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import '../services/api_service.dart';
+import '../services/overlay_service.dart';
 
 class FloatingOverlay extends StatefulWidget {
   const FloatingOverlay({super.key});
@@ -39,7 +38,7 @@ class _FloatingOverlayState extends State<FloatingOverlay> {
   @override
   void initState() {
     super.initState();
-    FlutterOverlayWindow.overlayListener.listen((event) {
+    OverlayService.overlayEvents.listen((event) {
       if (event == 'STOPPED' && mounted) {
         _stopScanning();
       }
@@ -63,7 +62,7 @@ class _FloatingOverlayState extends State<FloatingOverlay> {
     setState(() => isScanning = true);
     debugPrint("DEBUG (Overlay): Starting scan session.");
     // Notify main app that scanning actually started on overlay side
-    FlutterOverlayWindow.shareData("SYNC_START_SCAN");
+    OverlayService.shareData("SYNC_START_SCAN");
 
     // First call resets backend history; forward the first OCR payload too.
     _isRequestInFlight = true;
@@ -77,14 +76,14 @@ class _FloatingOverlayState extends State<FloatingOverlay> {
         _addSessionText(firstText.toString());
         debugPrint(
             "DEBUG (Overlay OCR first): ${_compactForLog(firstText.toString())}");
-        FlutterOverlayWindow.shareData("TEXT:${firstText.toString()}");
+        OverlayService.shareData("TEXT:${firstText.toString()}");
       } else {
         debugPrint("DEBUG (Overlay OCR first): response was empty.");
       }
     } catch (e) {
       debugPrint("Overlay first-scan API error: $e");
       if (!_isStopping) {
-        FlutterOverlayWindow.shareData("ERROR:${e.toString()}");
+        OverlayService.shareData("ERROR:${e.toString()}");
         await _stopScanning();
       }
       return;
@@ -119,14 +118,14 @@ class _FloatingOverlayState extends State<FloatingOverlay> {
           _addSessionText(newText.toString());
           debugPrint(
               "DEBUG (Overlay OCR): ${_compactForLog(newText.toString())}");
-          FlutterOverlayWindow.shareData("TEXT:${newText.toString()}");
+          OverlayService.shareData("TEXT:${newText.toString()}");
         } else {
           debugPrint("DEBUG (Overlay OCR): response was empty.");
         }
       } catch (e) {
         debugPrint("Overlay API error: $e");
         if (!_isStopping) {
-          FlutterOverlayWindow.shareData("ERROR:${e.toString()}");
+          OverlayService.shareData("ERROR:${e.toString()}");
           await _stopScanning();
         }
       } finally {
@@ -154,13 +153,13 @@ class _FloatingOverlayState extends State<FloatingOverlay> {
         final bulkText = _sessionLines.join('\n');
         debugPrint(
             "DEBUG (Overlay): Sending BULK_TEXT length=${bulkText.length}");
-        FlutterOverlayWindow.shareData("BULK_TEXT:$bulkText");
+        OverlayService.shareData("BULK_TEXT:$bulkText");
       }
 
-      FlutterOverlayWindow.shareData("SYNC_STOP_SCAN");
+      OverlayService.shareData("SYNC_STOP_SCAN");
 
       await Future.delayed(const Duration(milliseconds: 250));
-      await FlutterOverlayWindow.closeOverlay();
+      await OverlayService.closeOverlay();
     } finally {
       // Allow a fresh start when the overlay is shown again.
       _isStopping = false;

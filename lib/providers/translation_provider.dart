@@ -1,9 +1,8 @@
 // Get the reponse from the backend API
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import '../services/api_service.dart';
+import '../services/overlay_service.dart';
 
 class TranslationProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
@@ -54,7 +53,7 @@ class TranslationProvider with ChangeNotifier {
   TranslationProvider() {
     debugPrint(
         "DEBUG: TranslationProvider constructor called, setting up overlayListener.");
-    FlutterOverlayWindow.overlayListener.listen((event) {
+    OverlayService.overlayEvents.listen((event) {
       debugPrint("DEBUG: Received event from overlayListener: $event");
       if (event == "SYNC_START_SCAN") {
         debugPrint("DEBUG: Syncing START_SCAN from overlay");
@@ -65,8 +64,7 @@ class TranslationProvider with ChangeNotifier {
         _isScanning = false;
         notifyListeners();
         // Bring app back to foreground when scanning stops
-        const MethodChannel('com.example.gov_translator/app_channel')
-            .invokeMethod('bringToForeground');
+        OverlayService.bringToForeground();
       } else if (event is String && event.startsWith("ERROR:")) {
         final message = event.substring(6);
         debugPrint("DEBUG: Overlay OCR error => $message");
@@ -187,8 +185,6 @@ class TranslationProvider with ChangeNotifier {
   void stopContinuousScan() {
     _isScanning = false;
     notifyListeners();
-    try {
-      FlutterOverlayWindow.shareData("STOPPED");
-    } catch (_) {}
+    OverlayService.shareData("STOPPED");
   }
 }

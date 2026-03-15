@@ -3,8 +3,7 @@ import '../theme/app_theme.dart';
 
 import 'package:provider/provider.dart';
 import '../providers/translation_provider.dart';
-import 'package:flutter_overlay_window/flutter_overlay_window.dart';
-import 'package:flutter/services.dart';
+import '../services/overlay_service.dart';
 
 class InputPanel extends StatefulWidget {
   const InputPanel({super.key});
@@ -18,14 +17,14 @@ class _InputPanelState extends State<InputPanel> with WidgetsBindingObserver {
 
   Future<void> _cleanupStaleOverlay() async {
     final provider = Provider.of<TranslationProvider>(context, listen: false);
-    final isActive = await FlutterOverlayWindow.isActive();
+    final isActive = await OverlayService.isActive();
     if (!isActive) {
       return;
     }
 
     debugPrint("DEBUG (Main): Closing stale overlay from previous session.");
     provider.stopContinuousScan();
-    await FlutterOverlayWindow.closeOverlay();
+    await OverlayService.closeOverlay();
   }
 
   @override
@@ -58,7 +57,7 @@ class _InputPanelState extends State<InputPanel> with WidgetsBindingObserver {
         debugPrint(
             "DEBUG (Main): App resumed manually, auto-stopping overlay scan");
         provider.stopContinuousScan();
-        FlutterOverlayWindow.closeOverlay();
+        OverlayService.closeOverlay();
       }
     }
   }
@@ -149,45 +148,47 @@ class _InputPanelState extends State<InputPanel> with WidgetsBindingObserver {
                         if (translationProvider.isScanning) {
                           debugPrint("DEBUG: Stop Scanning button pressed!");
                           translationProvider.stopContinuousScan();
-                          await FlutterOverlayWindow.closeOverlay();
+                          await OverlayService.closeOverlay();
                         } else {
-                          debugPrint(
-                              "DEBUG: Start Continuous Scan triggered via overlay!");
-
-                          bool status =
-                              await FlutterOverlayWindow.isPermissionGranted();
-                          if (!status) {
-                            // Can't use await if requestPermission returns bool directly but doc says Future<bool?>
-                            final permissionStatus =
-                                await FlutterOverlayWindow.requestPermission();
-                            status = permissionStatus ?? false;
-                          }
-
-                          if (status) {
-                            final isActive =
-                                await FlutterOverlayWindow.isActive();
-                            if (!isActive) {
-                              await FlutterOverlayWindow.showOverlay(
-                                enableDrag: true,
-                                flag: OverlayFlag.defaultFlag,
-                                alignment: OverlayAlignment.centerRight,
-                                width: 100,
-                                height: 100,
-                              );
-                            }
-                            const MethodChannel(
-                                    'com.example.gov_translator/app_channel')
-                                .invokeMethod('moveToBackground');
-                          } else {
+                          if (!OverlayService.isSupported) {
                             if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text(
-                                      'Please grant "Display over other apps" permission to enable the hovering icon.'),
+                                      'Screen capture overlay is supported on Android only. Use Translate Now on web/desktop.'),
                                   backgroundColor: Colors.red,
                                 ),
                               );
                             }
+                            return;
+                          }
+
+                          debugPrint(
+                              "DEBUG: Start Continuous Scan triggered via overlay!");
+
+                          bool status =
+                              await OverlayService.isPermissionGranted();
+                          if (!status) {
+                            status = await OverlayService.requestPermission();
+                          }
+
+                          if (status) {
+                            final isActive = await OverlayService.isActive();
+                            if (!isActive) {
+                              await OverlayService.showOverlay();
+                            }
+                            await OverlayService.moveToBackground();
+                          } else {
+                            if (!context.mounted) {
+                              return;
+                            }
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'Please grant "Display over other apps" permission to enable the hovering icon.'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
                           }
                         }
                       },

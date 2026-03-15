@@ -4,9 +4,25 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  // Use http://10.0.2.2:8000 for Android Emulator
-  // Use http://localhost:8000 for Windows/Web
-  final String baseUrl = 'http://10.0.2.2:8000';
+  static const String _configuredBaseUrl =
+      String.fromEnvironment('API_BASE_URL', defaultValue: '');
+
+  String get baseUrl {
+    if (_configuredBaseUrl.isNotEmpty) {
+      return _configuredBaseUrl;
+    }
+
+    if (kIsWeb) {
+      return 'http://127.0.0.1:8000';
+    }
+
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return 'http://10.0.2.2:8000';
+      default:
+        return 'http://127.0.0.1:8000';
+    }
+  }
 
   Future<Map<String, dynamic>> translate({
     required String text,
