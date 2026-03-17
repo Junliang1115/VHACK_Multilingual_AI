@@ -1,12 +1,19 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  // Use http://10.0.2.2:8000 for Android Emulator
-  // Use http://localhost:8000 for Windows/Web
-  final String baseUrl = 'http://10.0.2.2:8000';
+  String get baseUrl {
+    if (kIsWeb) {
+      return 'http://localhost:8000';
+    }
+    if (Platform.isAndroid) {
+      return 'http://10.0.2.2:8000';
+    }
+    return 'http://localhost:8000';
+  }
 
   Future<Map<String, dynamic>> translate({
     required String text,

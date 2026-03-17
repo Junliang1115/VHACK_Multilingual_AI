@@ -3,9 +3,27 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import uvicorn
+import os
+from dotenv import load_dotenv
 from ocr_service import capture_and_ocr
 
-app = FastAPI(title="Gov Translate AI API")
+# Load environment variables
+load_dotenv()
+
+APP_NAME = os.getenv("APP_NAME", "Gov Translate AI API")
+API_VERSION = os.getenv("API_VERSION", "1.0.0")
+DEBUG = os.getenv("DEBUG", "True").lower() == "true"
+HOST = os.getenv("HOST", "0.0.0.0")
+PORT = int(os.getenv("PORT", "8000"))
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+origins_raw = os.getenv("ALLOWED_ORIGINS", "*").strip()
+ALLOWED_ORIGINS = ["*"] if origins_raw == "*" else [
+    origin.strip() for origin in origins_raw.split(",") if origin.strip()
+]
+
+app = FastAPI(title=APP_NAME, version=API_VERSION, debug=DEBUG)
 
 # Enable CORS for Flutter (necessary for web/mobile)
 app.add_middleware(

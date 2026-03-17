@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
@@ -23,13 +25,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final List<_ChatMessage> _messages = [];
   final ScrollController _scrollController = ScrollController();
   late final stt.SpeechToText _speech;
+  late final FlutterTts _tts;
   bool _isListening = false;
+  bool _voiceCancelled = false;
+  double _recordStartX = 0;
+  String _textBeforeRecording = '';
+  String _lastRecognizedWords = '';
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _speech = stt.SpeechToText();
+    _tts = FlutterTts();
+    _setupTts();
     _messages.add(
       const _ChatMessage(
         text:
@@ -45,7 +54,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _messageController.dispose();
     _scrollController.dispose();
     _speech.stop();
+    _tts.stop();
     super.dispose();
+  }
+
+  Future<void> _setupTts() async {
+    try {
+      await _tts.setSpeechRate(0.45);
+      await _tts.setPitch(1.0);
+      await _tts.setLanguage('en-US');
+    } catch (_) {}
+  }
+
+  Future<void> _speakText(String text) async {
+    final cleaned = text.trim();
+    if (cleaned.isEmpty) return;
+    try {
+      await _tts.stop();
+      await _tts.speak(cleaned);
+    } catch (_) {}
   }
 
   @override
@@ -83,26 +110,40 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _toggleListening() async {
-    if (_isListening) {
-      await _speech.stop();
-      if (mounted) {
-        setState(() => _isListening = false);
-      }
+  Future<void> _startListening() async {
+    if (_isListening) return;
+
+    final permissionStatus = await Permission.microphone.request();
+    if (!permissionStatus.isGranted) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Microphone permission is required for voice input.'),
+        ),
+      );
       return;
     }
 
     final available = await _speech.initialize(
       onStatus: (status) {
+        debugPrint('STT status: $status');
         if (status == 'done' || status == 'notListening') {
           if (mounted) {
             setState(() => _isListening = false);
           }
         }
       },
-      onError: (_) {
+      onError: (error) {
+        debugPrint('STT error: ${error.errorMsg} permanent=${error.permanent}');
         if (mounted) {
           setState(() => _isListening = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Voice input unavailable: ${error.errorMsg}. On emulator, ensure microphone access and Google speech services are available.',
+              ),
+            ),
+          );
         }
       },
     );
@@ -111,24 +152,87 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content:
-                Text('Speech recognition is not available on this device.')),
+          content: Text(
+            'Speech recognition is not available. On emulator, use a Google APIs image and enable microphone access.',
+          ),
+        ),
       );
       return;
     }
+
+    _textBeforeRecording = _messageController.text;
+    _lastRecognizedWords = '';
+    _voiceCancelled = false;
 
     if (mounted) {
       setState(() => _isListening = true);
     }
     await _speech.listen(
-      listenMode: stt.ListenMode.confirmation,
+      listenMode: stt.ListenMode.dictation,
+      listenFor: const Duration(seconds: 30),
+      pauseFor: const Duration(seconds: 3),
+      partialResults: true,
+      localeId: 'en_US',
       onResult: (result) {
+        final words = result.recognizedWords.trim();
+        if (words.isNotEmpty) {
+          _lastRecognizedWords = words;
+        }
         _messageController.text = result.recognizedWords;
         _messageController.selection = TextSelection.fromPosition(
           TextPosition(offset: _messageController.text.length),
         );
       },
     );
+  }
+
+  Future<void> _stopListening({bool cancel = false}) async {
+    if (!_isListening) return;
+    await _speech.stop();
+    // Give STT a brief moment to emit the final recognition event.
+    await Future.delayed(const Duration(milliseconds: 250));
+    if (mounted) {
+      setState(() => _isListening = false);
+    }
+
+    if (cancel) {
+      _messageController.text = _textBeforeRecording;
+      _messageController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _messageController.text.length),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Voice recording cancelled')),
+        );
+      }
+      return;
+    }
+
+    final transcript = _messageController.text.trim().isNotEmpty
+        ? _messageController.text.trim()
+        : _lastRecognizedWords.trim();
+    if (transcript.isNotEmpty) {
+      _messageController.text = transcript;
+      _messageController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _messageController.text.length),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Voice converted to text. Review it, then tap send.'),
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('No speech detected. Try speaking louder and closer.'),
+          ),
+        );
+      }
+    }
   }
 
   void _scrollToBottom() {
@@ -162,21 +266,32 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             text: provider.errorMessage, fromUser: false, isError: true));
       });
       _scrollToBottom();
+      await _speakText('There was an error. ${provider.errorMessage}');
       return;
     }
 
+    String ttsResponse = '';
     setState(() {
       if (provider.summary.isNotEmpty) {
         _messages.add(_ChatMessage(
             text: 'Summary:\n${provider.summary}', fromUser: false));
+        ttsResponse = provider.summary;
       }
       _messages.add(_ChatMessage(
         text:
             'Dialect (${provider.currentDialect}):\n${provider.translatedText}',
         fromUser: false,
       ));
+      if (provider.translatedText.isNotEmpty) {
+        if (ttsResponse.isEmpty) {
+          ttsResponse = provider.translatedText;
+        } else {
+          ttsResponse = '$ttsResponse. ${provider.translatedText}';
+        }
+      }
     });
     _scrollToBottom();
+    await _speakText(ttsResponse);
   }
 
   Future<void> _openAttachmentMenu() async {
@@ -474,6 +589,34 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   child: Text('Bot is processing...',
                       style: TextStyle(color: Colors.black54)),
                 ),
+              if (_isListening)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE6F0FF),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFBFD7FF)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.mic, size: 16, color: Color(0xFF0D47A1)),
+                      SizedBox(width: 8),
+                      Text(
+                        'Recording... Release to stop, swipe left to cancel',
+                        style: TextStyle(
+                          color: Color(0xFF0D47A1),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               Container(
                 color: const Color(0xFFEAF2FF),
                 padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
@@ -508,17 +651,47 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                 ),
                               ),
                             ),
-                            IconButton(
-                              onPressed: _toggleListening,
-                              icon: Icon(
-                                _isListening
-                                    ? Icons.mic_off_rounded
-                                    : Icons.mic_none_rounded,
-                                color: _isListening
-                                    ? Colors.red
-                                    : const Color(0xFF1976D2),
+                            GestureDetector(
+                              onTap: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Long press mic to record. Release to stop, swipe left to cancel.',
+                                    ),
+                                  ),
+                                );
+                              },
+                              onLongPressStart: (details) {
+                                _recordStartX = details.globalPosition.dx;
+                                _startListening();
+                              },
+                              onLongPressMoveUpdate: (details) {
+                                if (!_isListening || _voiceCancelled) return;
+                                final deltaX =
+                                    details.globalPosition.dx - _recordStartX;
+                                if (deltaX < -120) {
+                                  _voiceCancelled = true;
+                                  _stopListening(cancel: true);
+                                }
+                              },
+                              onLongPressEnd: (_) {
+                                if (!_isListening) return;
+                                _stopListening(cancel: _voiceCancelled);
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                child: Icon(
+                                  _isListening
+                                      ? Icons.mic_rounded
+                                      : Icons.mic_none_rounded,
+                                  color: _isListening
+                                      ? Colors.red
+                                      : const Color(0xFF1976D2),
+                                ),
                               ),
-                              tooltip: 'Speech to text',
                             ),
                           ],
                         ),
