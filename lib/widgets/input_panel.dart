@@ -221,7 +221,9 @@ class _InputPanelState extends State<InputPanel> with WidgetsBindingObserver {
               child: ElevatedButton(
                 onPressed: translationProvider.isLoading
                     ? null
-                    : () => translationProvider.translateText(_controller.text),
+                    : () async {
+                        await translationProvider.translateText(_controller.text);
+                      },
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [

@@ -5,8 +5,13 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
   // Use http://10.0.2.2:8000 for Android Emulator
-  // Use http://localhost:8000 for Windows/Web
-  final String baseUrl = 'http://10.0.2.2:8000';
+  // Use http://127.0.0.1:8000 for Windows/Web/iOS Simulator
+  // Note: 127.0.0.1 is more reliable than localhost on some systems
+  // static final String _localUrl = kIsWeb || !defaultTargetPlatform.toString().contains('android') 
+  //     ? 'http://127.0.0.1:8000' 
+  //     : 'http://10.213.5.100:8000';
+
+  final String baseUrl = 'http://10.213.5.100:8000';
 
   Future<Map<String, dynamic>> translate({
     required String text,

@@ -1,12 +1,12 @@
 import os
 import uuid
-from typing import List
+from typing import List, Optional
 
 import chromadb
 from chromadb.config import Settings
 
 _CHROMA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chroma_db")
-_CLIENT: chromadb.PersistentClient | None = None
+_CLIENT: Optional[chromadb.PersistentClient] = None
 
 
 def _get_client() -> chromadb.PersistentClient:
@@ -30,7 +30,7 @@ def store_chunks(
     chunks: List[str],
     embeddings: List[List[float]],
     collection_name: str = "default",
-    doc_id: str | None = None,
+    doc_id: Optional[str] = None,
 ) -> List[str]:
     """
     Store pre-chunked text and their embeddings into ChromaDB.

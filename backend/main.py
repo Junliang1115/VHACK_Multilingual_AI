@@ -1,3 +1,5 @@
+import os
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -10,7 +12,20 @@ from vector_store_service import store_chunks, query_collection, delete_collecti
 from llm_service import generate_rag_answer
 from llm_service_gemini import generate_rag_answer_gemini
 
-app = FastAPI(title="Gov Translate AI API")
+# Load environment variables
+load_dotenv()
+
+# Configuration from environment variables
+APP_NAME = os.getenv("APP_NAME", "Gov Translate AI")
+API_VERSION = os.getenv("API_VERSION", "1.0.0")
+DEBUG = os.getenv("DEBUG", "True").lower() == "true"
+HOST = os.getenv("HOST", "0.0.0.0")
+PORT = int(os.getenv("PORT", "8000"))
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+app = FastAPI(title=f"{APP_NAME} API")
 
 # Enable CORS for Flutter (necessary for web/mobile)
 app.add_middleware(
