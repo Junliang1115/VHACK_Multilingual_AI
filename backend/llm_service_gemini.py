@@ -11,6 +11,18 @@ _GEMINI_BASE_URL = os.getenv(
 )
 
 
+def _build_translation_prompt(text: str, dialect: str) -> str:
+    return (
+        "You are a professional translator. "
+        "Translate the input into the requested dialect or language. "
+        "Preserve meaning, tone, and names. "
+        "Return only the translated text without extra commentary.\n\n"
+        f"Target dialect or language: {dialect}\n"
+        f"Input: {text.strip()}\n"
+        "Translation:"
+    )
+
+
 def _build_prompt(question: str, contexts: List[str]) -> str:
     context_block = "\n\n".join(
         f"[{idx + 1}] {chunk.strip()}" for idx, chunk in enumerate(contexts) if chunk.strip()
@@ -52,6 +64,53 @@ def generate_rag_answer_gemini(
         raise ValueError("GEMINI_API_KEY is not set")
 
     prompt = _build_prompt(clean_question, contexts)
+    payload = {
+        "contents": [
+            {
+                "role": "user",
+                "parts": [{"text": prompt}],
+            }
+        ],
+        "generationConfig": {
+            "temperature": temperature,
+            "topP": top_p,
+            "maxOutputTokens": max_new_tokens,
+        },
+    }
+
+    try:
+        response = requests.post(
+            f"{_GEMINI_BASE_URL}/{_DEFAULT_MODEL}:generateContent?key={_GEMINI_API_KEY}",
+            json=payload,
+            timeout=180,
+        )
+    except requests.RequestException as exc:
+        raise RuntimeError("Failed to reach Gemini API") from exc
+
+    if response.status_code != 200:
+        raise RuntimeError(f"Gemini generation failed: {response.text}")
+
+    answer = _extract_text(response.json())
+    if not answer:
+        raise RuntimeError("Gemini returned an empty response")
+
+    return answer
+
+
+def generate_translation_gemini(
+    text: str,
+    dialect: str,
+    max_new_tokens: int = 256,
+    temperature: float = 0.2,
+    top_p: float = 0.9,
+) -> str:
+    clean_text = (text or "").strip()
+    if not clean_text:
+        raise ValueError("text is required")
+    if not _GEMINI_API_KEY:
+        raise ValueError("GEMINI_API_KEY is not set")
+
+    prompt = _build_translation_prompt(clean_text, dialect)
     payload = {
         "contents": [
             {

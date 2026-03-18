@@ -152,15 +152,15 @@ class _ResultCard extends StatelessWidget {
                   Consumer<TranslationProvider>(
                     builder: (context, provider, _) {
                       const dialectOptions = [
-                        'Kelate',
-                        'Hokkien',
-                        'Cantonese',
-                        'English',
+                        'Kedah',
+                        'Kelantan',
+                        'Terengganu',
+                        'Standard Malay',
                       ];
                       return DropdownButton<String>(
                         value: dialectOptions.contains(provider.currentDialect)
                             ? provider.currentDialect
-                            : 'English',
+                            : 'Standard Malay',
                         underline: const SizedBox(),
                         items: dialectOptions
                             .map((s) => DropdownMenuItem(

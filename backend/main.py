@@ -5,14 +5,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import uvicorn
-import os
-from dotenv import load_dotenv
 from ocr_service import capture_and_ocr
 from chunking_service import chunk_text
 from embedding_service import embed_texts
 from vector_store_service import store_chunks, query_collection, delete_collection, list_collections
-from llm_service import generate_rag_answer
-from llm_service_gemini import generate_rag_answer_gemini
+from llm_service import generate_rag_answer, generate_translation
+from llm_service_gemini import generate_rag_answer_gemini, generate_translation_gemini
 
 # Load environment variables
 load_dotenv()
@@ -166,6 +164,18 @@ def mock_translate(text: str, dialect: str) -> str:
     }
     return dialects.get(dialect, f"(Standard) {text}")
 
+
+def _normalize_dialect(dialect: str) -> str:
+    dialect_map = {
+        "Kelate": "Kelantan",
+        "Hokkien": "Hokkien",
+        "Cantonese": "Cantonese",
+        "English": "English",
+        "Standard": "Standard Malay",
+        "Standard Malay": "Standard Malay",
+    }
+    return dialect_map.get(dialect, dialect)
+
 @app.get("/")
 async def root():
     return {
@@ -179,15 +189,32 @@ async def root():
 async def translate_text(request: TranslationRequest):
     if not request.text:
         raise HTTPException(status_code=400, detail="Text is required")
-    
-    # Simulate processing
-    translated = mock_translate(request.text, request.target_dialect)
-    
+
+    print(
+        f"DEBUG: /translate dialect={request.target_dialect} text_length={len(request.text)}"
+    )
+
+    normalized_dialect = _normalize_dialect(request.target_dialect)
+
+    try:
+        # if GEMINI_API_KEY:
+        #     translated = generate_translation_gemini(
+        #         text=request.text,
+        #         dialect=normalized_dialect,
+        #     )
+        translated = generate_translation(
+            text=request.text,
+            dialect=normalized_dialect,
+        )
+    except Exception as exc:
+        print(f"DEBUG: /translate error => {exc}")
+        # Fall back to mock translation so the UI still responds.
+        translated = mock_translate(request.text, normalized_dialect)
+
     return TranslationResponse(
         original_text=request.text,
         translated_text=translated,
-        dialect=request.target_dialect,
-        summary="This is a generated summary of your translation request."
+        dialect=normalized_dialect,
     )
 
 @app.post("/summarize", response_model=SummaryResponse)
