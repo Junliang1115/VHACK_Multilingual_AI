@@ -1,5 +1,6 @@
 import os
 from typing import List
+import re
 
 import requests
 
@@ -10,13 +11,30 @@ _DEFAULT_MODEL = os.getenv("SAILOR2_MODEL_NAME", "sailor2:1b")
 def _build_translation_prompt(text: str, dialect: str) -> str:
     return (
         "You are a professional translator. "
-        "Translate the input into the requested dialect or language. "
+        "Translate the input into the requested dialect or language exactly. "
         "Preserve meaning, tone, and names. "
-        "Return only the translated text without extra commentary.\n\n"
+        "Return only the translated text. "
+        "Do not include labels, explanations, quotes, or markdown. "
+        "The output must be in the requested dialect or language.\n\n"
         f"Target dialect or language: {dialect}\n"
         f"Input: {text.strip()}\n"
         "Translation:"
     )
+
+
+def _extract_translation_only(answer: str) -> str:
+    cleaned = (answer or "").strip()
+    if not cleaned:
+        return ""
+
+    # Remove common model-added labels such as "Translation:".
+    cleaned = re.sub(r"^\s*(translation|translated text|output)\s*:\s*", "", cleaned, flags=re.IGNORECASE)
+
+    # Remove wrapping quotes while preserving internal punctuation.
+    if len(cleaned) >= 2 and cleaned[0] == cleaned[-1] and cleaned[0] in {'"', "'"}:
+        cleaned = cleaned[1:-1].strip()
+
+    return cleaned
 
 
 def _build_prompt(question: str, contexts: List[str]) -> str:
@@ -123,4 +141,4 @@ def generate_translation(
     if not answer:
         raise RuntimeError("Ollama returned an empty response")
 
-    return answer
+    return _extract_translation_only(answer)

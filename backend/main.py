@@ -1,4 +1,5 @@
 import os
+import re
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -176,6 +177,32 @@ def _normalize_dialect(dialect: str) -> str:
     }
     return dialect_map.get(dialect, dialect)
 
+
+def _estimate_translation_tokens(text: str) -> int:
+    # Rough estimate so long documents are not cut off during generation.
+    clean_text = (text or "").strip()
+    if not clean_text:
+        return 256
+    estimated = (len(clean_text) // 4) + 128
+    return max(256, min(4096, estimated))
+
+
+def _build_simple_summary(text: str, max_chars: int = 260) -> str:
+    clean_text = re.sub(r"\s+", " ", (text or "")).strip()
+    if not clean_text:
+        return "No summary available."
+
+    # Keep a concise preview by joining the first 1-2 sentences.
+    parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", clean_text) if p.strip()]
+    if not parts:
+        parts = [clean_text]
+    summary = " ".join(parts[:2])
+
+    if len(summary) > max_chars:
+        summary = f"{summary[:max_chars].rstrip()}..."
+
+    return summary
+
 @app.get("/")
 async def root():
     return {
@@ -195,26 +222,32 @@ async def translate_text(request: TranslationRequest):
     )
 
     normalized_dialect = _normalize_dialect(request.target_dialect)
+    max_tokens = _estimate_translation_tokens(request.text)
 
     try:
         # if GEMINI_API_KEY:
         #     translated = generate_translation_gemini(
         #         text=request.text,
         #         dialect=normalized_dialect,
+        #         max_new_tokens=max_tokens,
         #     )
         translated = generate_translation(
             text=request.text,
             dialect=normalized_dialect,
+            max_new_tokens=max_tokens,
         )
     except Exception as exc:
         print(f"DEBUG: /translate error => {exc}")
         # Fall back to mock translation so the UI still responds.
         translated = mock_translate(request.text, normalized_dialect)
 
+    summary = _build_simple_summary(translated)
+
     return TranslationResponse(
         original_text=request.text,
         translated_text=translated,
         dialect=normalized_dialect,
+        summary=summary,
     )
 
 @app.post("/summarize", response_model=SummaryResponse)
