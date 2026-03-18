@@ -5,6 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import uvicorn
+import os
+from dotenv import load_dotenv
 from ocr_service import capture_and_ocr
 from chunking_service import chunk_text
 from embedding_service import embed_texts

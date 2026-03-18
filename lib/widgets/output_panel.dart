@@ -94,7 +94,9 @@ class _ErrorState extends StatelessWidget {
             style: const TextStyle(color: Colors.redAccent),
           ),
           TextButton(
-            onPressed: () => Provider.of<TranslationProvider>(context, listen: false).translateText(""),
+            onPressed: () =>
+                Provider.of<TranslationProvider>(context, listen: false)
+                    .translateText(""),
             child: const Text('Clear'),
           )
         ],
@@ -148,14 +150,25 @@ class _ResultCard extends StatelessWidget {
                 ),
                 if (isTranslation)
                   Consumer<TranslationProvider>(
-                    builder: (context, provider, _) => DropdownButton<String>(
-                      value: provider.currentDialect,
-                      underline: const SizedBox(),
-                      items: ['Kedah', 'Kelantan', 'Terengganu', 'Standard']
-                          .map((s) => DropdownMenuItem(value: s, child: Text('$s Dialect')))
-                          .toList(),
-                      onChanged: (v) => provider.setDialect(v!),
-                    ),
+                    builder: (context, provider, _) {
+                      const dialectOptions = [
+                        'Kelate',
+                        'Hokkien',
+                        'Cantonese',
+                        'English',
+                      ];
+                      return DropdownButton<String>(
+                        value: dialectOptions.contains(provider.currentDialect)
+                            ? provider.currentDialect
+                            : 'English',
+                        underline: const SizedBox(),
+                        items: dialectOptions
+                            .map((s) => DropdownMenuItem(
+                                value: s, child: Text('$s Dialect')))
+                            .toList(),
+                        onChanged: (v) => provider.setDialect(v!),
+                      );
+                    },
                   ),
               ],
             ),
@@ -184,8 +197,12 @@ class _ResultCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                IconButton(onPressed: () {}, icon: const Icon(Icons.copy_rounded, size: 20)),
-                IconButton(onPressed: () {}, icon: const Icon(Icons.share_outlined, size: 20)),
+                IconButton(
+                    onPressed: () {},
+                    icon: const Icon(Icons.copy_rounded, size: 20)),
+                IconButton(
+                    onPressed: () {},
+                    icon: const Icon(Icons.share_outlined, size: 20)),
               ],
             ),
           ],
